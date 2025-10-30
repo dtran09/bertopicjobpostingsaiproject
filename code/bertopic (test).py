@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from bertopic import BERTopic
+from sklearn.feature_extraction.text import CountVectorizer
 import plotly.graph_objects as go
 
 # robust CSV loader (already present)
@@ -100,7 +101,9 @@ df = load_csv(csv_path)
 # select only 6000 entries
 df = df[0:6000]
 
-model = BERTopic(verbose=True)
+# use CountVectorizer to remove English stopwords from the topic word extraction
+vectorizer_model = CountVectorizer(stop_words="english")
+model = BERTopic(vectorizer_model=vectorizer_model, verbose=True)
 
 # convert to list (replace direct df.text access with robust extractor)
 try:
