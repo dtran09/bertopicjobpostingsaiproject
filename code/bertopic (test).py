@@ -3,8 +3,10 @@ import numpy as np
 from bertopic import BERTopic
 from sklearn.feature_extraction.text import CountVectorizer
 import plotly.graph_objects as go
+import os
+import re
 
-# robust CSV loader (already present)
+# CSV loader 
 def load_csv(path):
 	"""
 	Tries to detect gzip and attempts several encodings (utf-8, latin-1, cp1252).
@@ -48,7 +50,7 @@ def load_csv(path):
 		# raise the last meaningful exception
 		raise last_exc or e
 
-# new helper: detect best text column and return cleaned list of docs
+# detect best text column and return cleaned list of docs
 def get_texts_from_df(df, preferred=("text", "description", "job_description", "cleaned_text", "content", "posting", "job_post")):
 	"""
 	Return (column_name, list_of_texts). Tries preferred names first, then picks
@@ -103,7 +105,7 @@ df = df[0:6000]
 
 # use CountVectorizer to remove English stopwords from the topic word extraction
 vectorizer_model = CountVectorizer(stop_words="english")
-model = BERTopic(vectorizer_model=vectorizer_model, verbose=True)
+model = BERTopic(vectorizer_model=vectorizer_model, nr_topics = 10, verbose=True)
 
 # convert to list (replace direct df.text access with robust extractor)
 try:
@@ -209,10 +211,10 @@ def plot_topic_word_probs(topic_id, word_probs, show=True, save_html=None):
 # Build probabilities for all topics (top 10 words by default)
 all_topic_word_probs = get_all_topics_top_word_probs(model, n=10, method="normalize")
 
-# Example: plot topic 10 if present
-if 5 in all_topic_word_probs:
+# plot topic if present
+if 6 in all_topic_word_probs:
 	try:
-		plot_topic_word_probs(5, all_topic_word_probs[5])
+		plot_topic_word_probs(6, all_topic_word_probs[6])
 	except Exception as e:
 		print(f"Could not plot topic 10: {e}")
 
@@ -283,7 +285,7 @@ def top_docs_for_topic(topic_id, topics_list, probs_list, documents, n=12):
 	rank.sort(key=lambda x: x[1], reverse=True)
 	return [(i, round(conf, 4), documents[i]) for i, conf in rank[:n]]
 
-# Example: show top documents for topic (if present)
+# show top documents for topic (if present)
 if 9 in topic_conf_stats:
 	top_docs = top_docs_for_topic(9, topics, probabilities, docs, n=5)
 	print(f"Top docs for topic 9 (index, conf, snippet):")
@@ -412,3 +414,82 @@ full_df.insert(0, "document", docs)
 print("Per-document topic-distribution sample (first 5 rows):")
 print(full_df.head(5).to_string(index=False))
 full_df.to_csv("c:/Users/trand27/Python Projects/Bertopic Test/doc_topic_distributions_full.csv", index=False)
+
+# new: save per-topic pages and a clickable intertopic map HTML
+
+
+def save_topic_pages(topic_word_probs_dict, out_dir):
+	"""
+	Save one HTML page per topic showing the bar chart for that topic.
+	topic_word_probs_dict: {topic_id: [ {"word","score","prob"}, ... ] }
+	out_dir: directory to place topic_{id}.html
+	"""
+	os.makedirs(out_dir, exist_ok=True)
+	for tid, word_probs in topic_word_probs_dict.items():
+		try:
+			filename = os.path.join(out_dir, f"topic_{int(tid)}.html")
+			# plot_topic_word_probs already supports save_html (and returns fig)
+			plot_topic_word_probs(int(tid), word_probs, show=False, save_html=filename)
+		except Exception as e:
+			# skip problematic topics but continue
+			print(f"Warning: could not write page for topic {tid}: {e}")
+
+def save_intertopic_with_clicks(fig, out_path, topics_rel_dir="topic_pages"):
+	"""
+	Save an intertopic map HTML with a small JS handler:
+	- on click, parse the clicked point's text/hovertext/customdata for a topic id
+	- open topic_pages/topic_{id}.html in a new tab
+	"""
+	# Ensure the div id is stable so our JS can attach to it
+	div_id = "intertopic_map"
+	fig_html_fragment = fig.to_html(full_html=False, include_plotlyjs="cdn", div_id=div_id)
+
+	# JS: attach plotly_click handler and try to extract a topic id from point text/hovertext/customdata
+	# The regex finds the first integer in the clicked text (works for "Topic 3", "3", "-1", etc.)
+	post_script = f"""
+<script>
+document.addEventListener('DOMContentLoaded', function() {{
+  var gd = document.getElementById('{div_id}');
+  if(!gd) return;
+  gd.on('plotly_click', function(data) {{
+    try {{
+      var p = data.points[0] || {{}};
+      var txt = p.text || p.hovertext || (p.customdata && p.customdata[0]) || "";
+      // if customdata is an array/object, try to stringify
+      if(typeof txt === 'object') {{
+        try {{ txt = JSON.stringify(txt); }} catch(e) {{ txt = ''; }}
+      }}
+      var m = txt.toString().match(/-?\\d+/);
+      if(m) {{
+        var tid = m[0];
+        var url = '{topics_rel_dir}/topic_' + tid + '.html';
+        window.open(url, '_blank');
+        return;
+      }}
+      // Fallback: sometimes the point has 'pointNumber' or 'pointIndex' but no text;
+      // if hover labels are present in layout annotations we can try additional heuristics if needed.
+    }} catch(e) {{
+      console.log('click handler error', e);
+    }}
+  }});
+}});
+</script>
+"""
+	# Build full html
+	full_html = f"<!DOCTYPE html>\n<html>\n<head>\n<meta charset='utf-8' />\n<title>Intertopic Map (click a topic)</title>\n</head>\n<body>\n{fig_html_fragment}\n{post_script}\n</body>\n</html>"
+	# write out
+	with open(out_path, "w", encoding="utf-8") as f:
+		f.write(full_html)
+	print(f"Wrote intertopic map with click handler to: {out_path}")
+
+# create topic pages directory (relative to the intertopic HTML) and write files
+output_base = r"c:\Users\trand27\Python Projects\Bertopic Test"
+topic_pages_dir = os.path.join(output_base, "topic_pages")
+save_topic_pages(all_topic_word_probs, topic_pages_dir)
+
+# save intertopic map HTML (the fig variable used earlier - reuse same figure)
+intertopic_html_path = os.path.join(output_base, "intertopic_map_clickable.html")
+try:
+	save_intertopic_with_clicks(fig, intertopic_html_path, topics_rel_dir="topic_pages")
+except Exception as e:
+	print("Could not save clickable intertopic HTML:", e)
