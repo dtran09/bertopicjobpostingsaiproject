@@ -415,9 +415,6 @@ print("Per-document topic-distribution sample (first 5 rows):")
 print(full_df.head(5).to_string(index=False))
 full_df.to_csv("c:/Users/trand27/Python Projects/Bertopic Test/doc_topic_distributions_full.csv", index=False)
 
-# new: save per-topic pages and a clickable intertopic map HTML
-
-
 def save_topic_pages(topic_word_probs_dict, out_dir):
 	"""
 	Save one HTML page per topic showing the bar chart for that topic.
@@ -444,8 +441,10 @@ def save_intertopic_with_clicks(fig, out_path, topics_rel_dir="topic_pages"):
 	div_id = "intertopic_map"
 	fig_html_fragment = fig.to_html(full_html=False, include_plotlyjs="cdn", div_id=div_id)
 
-	# JS: attach plotly_click handler and try to extract a topic id from point text/hovertext/customdata
-	# The regex finds the first integer in the clicked text (works for "Topic 3", "3", "-1", etc.)
+	# JS: attach plotly_click handler and try to extract a topic id from multiple parts
+	# This version collects several candidate fields (text, hovertext, customdata, data.name,
+	# pointIndex/pointNumber) and finally JSON-stringifies the whole point as a fallback.
+	# It then searches for the first integer anywhere in those values.
 	post_script = f"""
 <script>
 document.addEventListener('DOMContentLoaded', function() {{
@@ -453,21 +452,35 @@ document.addEventListener('DOMContentLoaded', function() {{
   if(!gd) return;
   gd.on('plotly_click', function(data) {{
     try {{
-      var p = data.points[0] || {{}};
-      var txt = p.text || p.hovertext || (p.customdata && p.customdata[0]) || "";
-      // if customdata is an array/object, try to stringify
-      if(typeof txt === 'object') {{
-        try {{ txt = JSON.stringify(txt); }} catch(e) {{ txt = ''; }}
+      var p = (data && data.points && data.points[0]) || {{}};
+      var candidates = [];
+
+      if(p.text) candidates.push(p.text);
+      if(p.hovertext) candidates.push(p.hovertext);
+      if(p.customdata) candidates.push(p.customdata);
+      if(p.customdata && p.customdata[0]) candidates.push(p.customdata[0]);
+      if(p.data && p.data.name) candidates.push(p.data.name);
+      if(typeof p.pointIndex !== 'undefined') candidates.push(p.pointIndex.toString());
+      if(typeof p.pointNumber !== 'undefined') candidates.push(p.pointNumber.toString());
+      if(typeof p.curveNumber !== 'undefined') candidates.push(p.curveNumber.toString());
+
+      try {{ candidates.push(JSON.stringify(p)); }} catch(e) {{ /* ignore */ }}
+
+      var tid = null;
+      for(var i=0;i<candidates.length;i++) {{
+        var txt = candidates[i];
+        if(typeof txt === 'object') {{
+          try {{ txt = JSON.stringify(txt); }} catch(e) {{ txt = ''; }}
+        }}
+        if(!txt) continue;
+        var m = txt.toString().match(/-?\\d+/);
+        if(m) {{ tid = m[0]; break; }}
       }}
-      var m = txt.toString().match(/-?\\d+/);
-      if(m) {{
-        var tid = m[0];
+      if(tid !== null) {{
         var url = '{topics_rel_dir}/topic_' + tid + '.html';
         window.open(url, '_blank');
         return;
       }}
-      // Fallback: sometimes the point has 'pointNumber' or 'pointIndex' but no text;
-      // if hover labels are present in layout annotations we can try additional heuristics if needed.
     }} catch(e) {{
       console.log('click handler error', e);
     }}
@@ -493,3 +506,19 @@ try:
 	save_intertopic_with_clicks(fig, intertopic_html_path, topics_rel_dir="topic_pages")
 except Exception as e:
 	print("Could not save clickable intertopic HTML:", e)
+
+# Save BERTopic model
+model_save_base = os.path.join(output_base, "bertopic_model")
+try:
+	# BERTopic.save typically writes a directory or file at the given path
+	model.save(model_save_base)
+	print(f"Saved BERTopic model to: {model_save_base}")
+except Exception as e_save:
+	try:
+		import pickle
+		pkl_path = model_save_base + ".pkl"
+		with open(pkl_path, "wb") as f:
+			pickle.dump(model, f)
+		print(f"BERTopic.save failed ({e_save!r}), model pickled to: {pkl_path}")
+	except Exception as e_pickle:
+		print("Failed to save BERTopic model using both model.save and pickle:", e_save, e_pickle)
