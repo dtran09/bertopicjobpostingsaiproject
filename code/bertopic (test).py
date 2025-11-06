@@ -3,10 +3,12 @@ import numpy as np
 from bertopic import BERTopic
 from sklearn.feature_extraction.text import CountVectorizer
 from wordcloud import WordCloud
+from scipy.cluster import hierarchy
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import os
 import re
+import webbrowser
 
 # CSV loader 
 def load_csv(path):
@@ -107,6 +109,7 @@ df = df[0:6000]
 
 # use CountVectorizer to remove English stopwords from the topic word extraction
 vectorizer_model = CountVectorizer(stop_words="english")
+
 model = BERTopic(vectorizer_model=vectorizer_model, nr_topics = 15, verbose=True)
 
 # convert to list (replace direct df.text access with robust extractor)
@@ -419,11 +422,56 @@ full_df.to_csv("c:/Users/trand27/Python Projects/Bertopic Test/doc_topic_distrib
 
 def save_topic_pages(topic_word_probs_dict, out_dir):
 	"""
-	Save one HTML page per topic showing the bar chart and a wordcloud for that topic.
+	Save one HTML page per topic showing the Plotly bar chart for that topic.
+	Also generate one combined wordcloud for all topics and write an HTML page for it.
 	topic_word_probs_dict: {topic_id: [ {"word","score","prob"}, ... ] }
-	out_dir: directory to place topic_{id}.html and topic_{id}_wordcloud.png
+	out_dir: directory to place topic_{id}.html and all_topics_wordcloud.png/html
 	"""
 	os.makedirs(out_dir, exist_ok=True)
+
+	# --- Build combined frequency map across all topics ---
+	combined_freqs = {}
+	for tid, word_probs in topic_word_probs_dict.items():
+		for w in word_probs:
+			try:
+				weight = w.get("prob")
+				if weight is None:
+					weight = w.get("score", 1.0)
+				combined_freqs[str(w["word"])] = combined_freqs.get(str(w["word"]), 0.0) + float(weight)
+			except Exception:
+				continue
+
+	# Create one big wordcloud image for all topics
+	try:
+		if combined_freqs:
+			combined_img = os.path.join(out_dir, "all_topics_wordcloud.png")
+			wc = WordCloud(width=1400, height=700, background_color="white")
+			wc.generate_from_frequencies(combined_freqs)
+			wc.to_file(combined_img)
+
+			# Create an HTML page that embeds the combined wordcloud image
+			combined_html = os.path.join(out_dir, "all_topics_wordcloud.html")
+			page_html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset='utf-8' />
+<title>All Topics — Combined Wordcloud</title>
+</head>
+<body>
+<h1>All Topics Combined Wordcloud</h1>
+<div><img src="all_topics_wordcloud.png" alt="Combined wordcloud" style="max-width:100%;height:auto;"/></div>
+</body>
+</html>"""
+			with open(combined_html, "w", encoding="utf-8") as f:
+				f.write(page_html)
+		else:
+			combined_html = None
+			print("Warning: combined word frequencies empty; not creating combined wordcloud.")
+	except Exception as e:
+		combined_html = None
+		print("Warning: could not create combined wordcloud:", e)
+
+	# --- Per-topic pages (Plotly chart only) ---
 	for tid, word_probs in topic_word_probs_dict.items():
 		try:
 			# skip empty topics
@@ -431,27 +479,10 @@ def save_topic_pages(topic_word_probs_dict, out_dir):
 				print(f"Warning: no words for topic {tid}, skipping page.")
 				continue
 
-			# build frequency dict for WordCloud (use 'prob' if available, otherwise 'score')
-			freqs = {}
-			for w in word_probs:
-				weight = w.get("prob")
-				if weight is None:
-					weight = w.get("score", 1.0)
-				try:
-					freqs[str(w["word"])] = float(weight)
-				except Exception:
-					continue
-
-			# create wordcloud image (saved as PNG)
-			wc = WordCloud(width=900, height=450, background_color="white")
-			wc.generate_from_frequencies(freqs)
-			img_filename = os.path.join(out_dir, f"topic_{int(tid)}_wordcloud.png")
-			wc.to_file(img_filename)
-
 			# create the Plotly figure for the topic (do not write standalone HTML)
 			fig = plot_topic_word_probs(int(tid), word_probs, show=False, save_html=None)
 
-			# embed the plotly fragment and the wordcloud image in a single HTML page
+			# embed the plotly fragment in a single HTML page for the topic
 			div_id = f"topic_plot_{int(tid)}"
 			plot_fragment = fig.to_html(full_html=False, include_plotlyjs="cdn", div_id=div_id)
 
@@ -460,16 +491,13 @@ def save_topic_pages(topic_word_probs_dict, out_dir):
 <html>
 <head>
 <meta charset='utf-8' />
-<title>Topic {int(tid)} — words & wordcloud</title>
+<title>Topic {int(tid)} — words</title>
 </head>
 <body>
 <h1>Topic {int(tid)}</h1>
 <div>
 {plot_fragment}
 </div>
-<hr/>
-<h2>Wordcloud</h2>
-<div><img src="topic_{int(tid)}_wordcloud.png" alt="Wordcloud for topic {int(tid)}" style="max-width:100%;height:auto;"/></div>
 </body>
 </html>"""
 			with open(page_path, "w", encoding="utf-8") as f:
@@ -479,20 +507,26 @@ def save_topic_pages(topic_word_probs_dict, out_dir):
 			# skip problematic topics but continue
 			print(f"Warning: could not write page for topic {tid}: {e}")
 
+	# If we created a combined page, open it in the default browser once
+	try:
+		if combined_html:
+			webbrowser.open("file://" + os.path.abspath(combined_html))
+			print(f"Wrote and opened combined wordcloud page: {combined_html}")
+	except Exception as e:
+		print("Warning: could not open combined wordcloud in browser:", e)
+
 def save_intertopic_with_clicks(fig, out_path, topics_rel_dir="topic_pages"):
 	"""
 	Save an intertopic map HTML with a small JS handler:
 	- on click, parse the clicked point's text/hovertext/customdata for a topic id
-	- open topic_pages/topic_{id}.html in a new tab
+	- open topic_pages/topic_{id}.html and topic_pages/all_topics_wordcloud.html in new tabs
 	"""
 	# Ensure the div id is stable so our JS can attach to it
 	div_id = "intertopic_map"
 	fig_html_fragment = fig.to_html(full_html=False, include_plotlyjs="cdn", div_id=div_id)
 
 	# JS: attach plotly_click handler and try to extract a topic id from multiple parts
-	# This version collects several candidate fields (text, hovertext, customdata, data.name,
-	# pointIndex/pointNumber) and finally JSON-stringifies the whole point as a fallback.
-	# It then searches for the first integer anywhere in those values.
+	# This version opens both the topic page and the combined wordcloud page when clicking
 	post_script = f"""
 <script>
 document.addEventListener('DOMContentLoaded', function() {{
@@ -525,8 +559,11 @@ document.addEventListener('DOMContentLoaded', function() {{
         if(m) {{ tid = m[0]; break; }}
       }}
       if(tid !== null) {{
-        var url = '{topics_rel_dir}/topic_' + tid + '.html';
-        window.open(url, '_blank');
+        var topicUrl = '{topics_rel_dir}/topic_' + tid + '.html';
+        var wcUrl = '{topics_rel_dir}/all_topics_wordcloud.html';
+        // open topic page and combined wordcloud page in separate tabs
+        window.open(topicUrl, '_blank');
+        window.open(wcUrl, '_blank');
         return;
       }}
     }} catch(e) {{
@@ -570,3 +607,27 @@ except Exception as e_save:
 		print(f"BERTopic.save failed ({e_save!r}), model pickled to: {pkl_path}")
 	except Exception as e_pickle:
 		print("Failed to save BERTopic model using both model.save and pickle:", e_save, e_pickle)
+
+# Generate and show hierarchical clustering of topics, then save as HTML
+try:
+	# linkage using scipy.cluster.hierarchy (optimal_ordering can help layout)
+	linkage_function = lambda x: hierarchy.linkage(x, method="single", optimal_ordering=True)
+	hierarchical_topics = model.hierarchical_topics(docs, linkage_function=linkage_function)
+	fig_hierarchy = model.visualize_hierarchy(hierarchical_topics=hierarchical_topics)
+	# display and save
+	fig_hierarchy.show()
+	hier_html = os.path.join(output_base, "hierarchy_map.html")
+	try:
+		fig_hierarchy.write_html(hier_html, include_plotlyjs="cdn")
+		print(f"Wrote hierarchical topics visualization to: {hier_html}")
+	except Exception as e_w:
+		# fallback: try to_html and write manually
+		try:
+			fragment = fig_hierarchy.to_html(full_html=True, include_plotlyjs="cdn")
+			with open(hier_html, "w", encoding="utf-8") as fh:
+				fh.write(fragment)
+			print(f"Wrote hierarchical topics visualization to: {hier_html}")
+		except Exception as e2:
+			print("Failed to save hierarchy HTML:", e_w, e2)
+except Exception as e:
+	print("Could not generate/save hierarchical topics visualization:", e)
