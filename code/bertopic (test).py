@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 from bertopic import BERTopic
 from sklearn.feature_extraction.text import CountVectorizer
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import os
 import re
@@ -105,7 +107,7 @@ df = df[0:6000]
 
 # use CountVectorizer to remove English stopwords from the topic word extraction
 vectorizer_model = CountVectorizer(stop_words="english")
-model = BERTopic(vectorizer_model=vectorizer_model, nr_topics = 10, verbose=True)
+model = BERTopic(vectorizer_model=vectorizer_model, nr_topics = 15, verbose=True)
 
 # convert to list (replace direct df.text access with robust extractor)
 try:
@@ -417,16 +419,62 @@ full_df.to_csv("c:/Users/trand27/Python Projects/Bertopic Test/doc_topic_distrib
 
 def save_topic_pages(topic_word_probs_dict, out_dir):
 	"""
-	Save one HTML page per topic showing the bar chart for that topic.
+	Save one HTML page per topic showing the bar chart and a wordcloud for that topic.
 	topic_word_probs_dict: {topic_id: [ {"word","score","prob"}, ... ] }
-	out_dir: directory to place topic_{id}.html
+	out_dir: directory to place topic_{id}.html and topic_{id}_wordcloud.png
 	"""
 	os.makedirs(out_dir, exist_ok=True)
 	for tid, word_probs in topic_word_probs_dict.items():
 		try:
-			filename = os.path.join(out_dir, f"topic_{int(tid)}.html")
-			# plot_topic_word_probs already supports save_html (and returns fig)
-			plot_topic_word_probs(int(tid), word_probs, show=False, save_html=filename)
+			# skip empty topics
+			if not word_probs:
+				print(f"Warning: no words for topic {tid}, skipping page.")
+				continue
+
+			# build frequency dict for WordCloud (use 'prob' if available, otherwise 'score')
+			freqs = {}
+			for w in word_probs:
+				weight = w.get("prob")
+				if weight is None:
+					weight = w.get("score", 1.0)
+				try:
+					freqs[str(w["word"])] = float(weight)
+				except Exception:
+					continue
+
+			# create wordcloud image (saved as PNG)
+			wc = WordCloud(width=900, height=450, background_color="white")
+			wc.generate_from_frequencies(freqs)
+			img_filename = os.path.join(out_dir, f"topic_{int(tid)}_wordcloud.png")
+			wc.to_file(img_filename)
+
+			# create the Plotly figure for the topic (do not write standalone HTML)
+			fig = plot_topic_word_probs(int(tid), word_probs, show=False, save_html=None)
+
+			# embed the plotly fragment and the wordcloud image in a single HTML page
+			div_id = f"topic_plot_{int(tid)}"
+			plot_fragment = fig.to_html(full_html=False, include_plotlyjs="cdn", div_id=div_id)
+
+			page_path = os.path.join(out_dir, f"topic_{int(tid)}.html")
+			page_html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset='utf-8' />
+<title>Topic {int(tid)} — words & wordcloud</title>
+</head>
+<body>
+<h1>Topic {int(tid)}</h1>
+<div>
+{plot_fragment}
+</div>
+<hr/>
+<h2>Wordcloud</h2>
+<div><img src="topic_{int(tid)}_wordcloud.png" alt="Wordcloud for topic {int(tid)}" style="max-width:100%;height:auto;"/></div>
+</body>
+</html>"""
+			with open(page_path, "w", encoding="utf-8") as f:
+				f.write(page_html)
+
 		except Exception as e:
 			# skip problematic topics but continue
 			print(f"Warning: could not write page for topic {tid}: {e}")
