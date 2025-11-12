@@ -11,7 +11,8 @@ def dedupe_job_descriptions(input_path: Path, output_path: Path, sheet_name=None
 	# Read CSV or Excel depending on input file extension
 	if input_path.suffix.lower() in ('.xls', '.xlsx'):
 		# sheet_name may be None, int or string; pandas handles it
-		df = pd.read_excel(input_path, sheet_name=sheet_name if sheet_name is not None else 0)
+		# preserve literal "N/A" strings (don't treat them as NaN)
+		df = pd.read_excel(input_path, sheet_name=sheet_name if sheet_name is not None else 0, keep_default_na=False)
 	else:
 		# Try common encodings to avoid UnicodeDecodeError on Windows CSVs
 		encodings = ['utf-8', 'utf-8-sig', 'cp1252', 'latin-1']
@@ -20,7 +21,8 @@ def dedupe_job_descriptions(input_path: Path, output_path: Path, sheet_name=None
 		last_exc = None
 		for enc in encodings:
 			try:
-				df = pd.read_csv(input_path, encoding=enc, low_memory=False)
+				# preserve literal "N/A" strings (don't treat them as NaN)
+				df = pd.read_csv(input_path, encoding=enc, low_memory=False, keep_default_na=False)
 				used_encoding = enc
 				break
 			except (UnicodeDecodeError, pd.errors.ParserError, Exception) as e:
@@ -33,7 +35,8 @@ def dedupe_job_descriptions(input_path: Path, output_path: Path, sheet_name=None
 					try:
 						with open(input_path, 'r', encoding=enc, errors='replace') as f:
 							text = f.read()
-						df = pd.read_csv(io.StringIO(text))
+						# preserve literal "N/A" strings (don't treat them as NaN)
+						df = pd.read_csv(io.StringIO(text), keep_default_na=False)
 						used_encoding = f"{enc} (errors=replace)"
 						break
 					except Exception:
@@ -49,9 +52,12 @@ def dedupe_job_descriptions(input_path: Path, output_path: Path, sheet_name=None
 		raise KeyError(f"Column '{col_name}' not found in {input_path} (columns: {list(df.columns)})")
 
 	# Create normalized helper column to catch trivial variations (trim, collapse spaces, lowercase)
+	# Also replace any occurrence of the garbled sequence ﾃ・EEEEﾃ・EEﾃ・EEEE with a single apostrophe
+	garbage_seq = 'ﾃ・EEEEﾃ・EEﾃ・EEEE'
 	df['__jd_norm'] = (
 		df[col_name]
 		.astype(str)  # ensures non-strings are handled
+		.str.replace(garbage_seq, "'", regex=False)
 		.str.strip()
 		.str.replace(r'\s+', ' ', regex=True)
 		.str.lower()
