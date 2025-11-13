@@ -1,9 +1,10 @@
 import pandas as pd
 import numpy as np
 from bertopic import BERTopic
-from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import CountVectorizer, ENGLISH_STOP_WORDS
 from wordcloud import WordCloud
 from scipy.cluster import hierarchy
+import spacy
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import os
@@ -107,10 +108,49 @@ df = load_csv(csv_path)
 # select only 6000 entries
 df = df[0:6000]
 
-# use CountVectorizer to remove English stopwords from the topic word extraction
-vectorizer_model = CountVectorizer(stop_words="english")
+# --- new: load spaCy model with download fallback and provide tokenizer fallback ---
+spacy_available = False
+nlp = None
+try:
+	# try to load installed model
+	nlp = spacy.load("en_core_web_sm", disable=["ner"])
+	spacy_available = True
+except Exception:
+	try:
+		# attempt to download the model and load again
+		print("spaCy model 'en_core_web_sm' not found — attempting to download...")
+		spacy.cli.download("en_core_web_sm")
+		nlp = spacy.load("en_core_web_sm", disable=["ner"])
+		spacy_available = True
+	except Exception:
+		# final fallback: no spaCy model available
+		print("Warning: could not load or download 'en_core_web_sm'. Falling back to simple stopword tokenizer.")
+		nlp = None
+		spacy_available = False
 
-model = BERTopic(vectorizer_model=vectorizer_model, nr_topics = 15, verbose=True)
+# sklearn stopwords for fallback tokenizer
+sklearn_stop = set(ENGLISH_STOP_WORDS)
+
+def pos_tokenizer_exclude(text, exclude_pos={"ADJ", "PRON"}):
+	"""
+	Tokenizer for CountVectorizer:
+	- If spaCy is available, return lemmas in lowercase excluding tokens that are stopwords,
+	  non-alphabetic, or whose POS is in exclude_pos.
+	- If spaCy is not available, fallback to a simple regex tokenizer that removes common stopwords.
+	"""
+	if spacy_available and nlp is not None:
+		doc = nlp(text or "")
+		return [token.lemma_.lower() for token in doc if token.is_alpha and not token.is_stop and token.pos_ not in exclude_pos]
+	# fallback: simple tokenizer + sklearn stopwords (no POS filtering possible)
+	toks = re.findall(r"\b[a-zA-Z]{2,}\b", (text or "").lower())
+	return [t for t in toks if t not in sklearn_stop]
+# --- end new --------------------------------------------------------------
+
+# use CountVectorizer with the custom tokenizer to remove adjectives/pronouns and stopwords
+# note: token_pattern must be None when using a custom tokenizer
+vectorizer_model = CountVectorizer(tokenizer=pos_tokenizer_exclude, token_pattern=None, lowercase=True)
+
+model = BERTopic(vectorizer_model=vectorizer_model, nr_topics = 15, min_topic_size = 10, verbose=True)
 
 # convert to list (replace direct df.text access with robust extractor)
 try:
