@@ -5,6 +5,7 @@ from sklearn.feature_extraction.text import CountVectorizer, ENGLISH_STOP_WORDS
 from wordcloud import WordCloud
 from scipy.cluster import hierarchy
 import spacy
+from umap import UMAP
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import os
@@ -108,7 +109,7 @@ df = load_csv(csv_path)
 # select only 6000 entries
 df = df[0:6000]
 
-# --- new: load spaCy model with download fallback and provide tokenizer fallback ---
+# load spaCy model with download fallback and provide tokenizer fallback ---
 spacy_available = False
 nlp = None
 try:
@@ -131,26 +132,58 @@ except Exception:
 # sklearn stopwords for fallback tokenizer
 sklearn_stop = set(ENGLISH_STOP_WORDS)
 
-def pos_tokenizer_exclude(text, exclude_pos={"ADJ", "PRON"}):
+EXTENDED_STOPWORDS = set(ENGLISH_STOP_WORDS).union({
+	"date", "post", "title", "datum", "type", "time", "posted", "posting",
+	"apply", "job", "company", "include", "includes", "come", "work", "experience",
+	"required", "requirement", "requirements", "role", "position", "opportunity",
+	"skill", "skills", "ability", "new", "use", "using", "based", "within",
+	"environment", "level", "strong", "excellent", "good", "knowledge", "understanding"
+})
+
+def improved_tokenizer(text):
 	"""
-	Tokenizer for CountVectorizer:
-	- If spaCy is available, return lemmas in lowercase excluding tokens that are stopwords,
-	  non-alphabetic, or whose POS is in exclude_pos.
-	- If spaCy is not available, fallback to a simple regex tokenizer that removes common stopwords.
+	More balanced tokenizer that keeps meaningful job-related terms.
+	Uses spaCy when available (lemmas + POS filtering), otherwise a regex fallback.
 	"""
 	if spacy_available and nlp is not None:
 		doc = nlp(text or "")
-		return [token.lemma_.lower() for token in doc if token.is_alpha and not token.is_stop and token.pos_ not in exclude_pos]
-	# fallback: simple tokenizer + sklearn stopwords (no POS filtering possible)
-	toks = re.findall(r"\b[a-zA-Z]{2,}\b", (text or "").lower())
-	return [t for t in toks if t not in sklearn_stop]
-# --- end new --------------------------------------------------------------
+		tokens = []
+		for token in doc:
+			if (token.is_alpha and
+				not token.is_stop and
+				token.lemma_.lower() not in EXTENDED_STOPWORDS and
+				len(token.lemma_) > 2):
+				# Include nouns, proper nouns, adjectives, and some verbs
+				if token.pos_ in {"NOUN", "PROPN", "ADJ", "VERB"}:
+					tokens.append(token.lemma_.lower())
+		return tokens
+	else:
+		# Fallback tokenizer: words of length >=3 filtered by extended stopwords
+		toks = re.findall(r"\b[a-zA-Z]{3,}\b", (text or "").lower())
+		return [t for t in toks if t not in EXTENDED_STOPWORDS]
 
 # use CountVectorizer with the custom tokenizer to remove adjectives/pronouns and stopwords
 # note: token_pattern must be None when using a custom tokenizer
-vectorizer_model = CountVectorizer(tokenizer=pos_tokenizer_exclude, token_pattern=None, lowercase=True)
+vectorizer_model = CountVectorizer(
+	tokenizer=improved_tokenizer,
+	token_pattern=None,
+	lowercase=True,
+	ngram_range=(1, 2),    # include bigrams (captures phrases like "machine learning")
+	min_df=0.01,           
+	max_df=0.85,           # ignore very frequent terms
+	max_features=15000
+)
 
-model = BERTopic(vectorizer_model=vectorizer_model, nr_topics = 15, min_topic_size = 10, verbose=True)
+# UMAP for better dimensionality reduction + explicit sentence-transformer embedding
+umap_model = UMAP(n_neighbors=15, n_components=5, min_dist=0.0, metric="cosine", random_state=42)
+model = BERTopic(
+	embedding_model="all-MiniLM-L6-v2",   # explicit, compact SBERT model
+	umap_model=umap_model,
+	vectorizer_model=vectorizer_model,
+	min_topic_size=25,
+	nr_topics="auto",
+	verbose=True
+)
 
 # convert to list (replace direct df.text access with robust extractor)
 try:
@@ -162,6 +195,51 @@ try:
 		raise ValueError("No non-empty documents found after extracting the text column.")
 except Exception as e:
 	raise RuntimeError(f"Failed to extract documents from DataFrame: {e}")
+
+# paragraph splitting helpers (implementing provided snippet) ---
+def split_paragraphs_by_newline(records, text_key="Job Description"):
+	"""
+	For each record (dict) in records, split the text_key value by single newline,
+	store list under record["paragraphs"], and return the flattened list of paragraphs.
+	Accepts a pandas DataFrame (converted to records) or list-of-dicts.
+	"""
+	if isinstance(records, pd.DataFrame):
+		records = records.to_dict(orient="records")
+	paras_all = []
+	for r in records:
+		jb = r.get(text_key, "") if isinstance(r, dict) else ""
+		paras = [p.strip() for p in str(jb).split("\n") if p.strip()]
+		r["paragraphs"] = paras
+		paras_all.extend(paras)
+	return paras_all
+
+def split_paragraphs_by_two_newline(records, text_key="Job Description"):
+	"""
+	Similar to split_paragraphs_by_newline but splits on double-newline ("\n\n").
+	"""
+	if isinstance(records, pd.DataFrame):
+		records = records.to_dict(orient="records")
+	paras_all = []
+	for r in records:
+		jb = r.get(text_key, "") if isinstance(r, dict) else ""
+		paras = [p.strip() for p in str(jb).split("\n\n") if p.strip()]
+		r["paragraphs"] = paras
+		paras_all.extend(paras)
+	return paras_all
+
+# Use the detected text_col from get_texts_from_df as the key when possible.
+# Convert df to records and build both paragraph lists for later use.
+try:
+	df_records = df.to_dict(orient="records")
+	paragraphs_by_newline = split_paragraphs_by_newline(df_records, text_key=text_col)
+	paragraphs_by_two_newline = split_paragraphs_by_two_newline(df_records, text_key=text_col)
+	# optional: also expose paragraph lists derived directly from the docs list
+	# (docs are plain strings; convert temporarily)
+	docs_records = [{text_col: d} for d in docs]
+	docs_paragraphs_by_newline = split_paragraphs_by_newline(docs_records, text_key=text_col)
+	docs_paragraphs_by_two_newline = split_paragraphs_by_two_newline(docs_records, text_key=text_col)
+except Exception as e:
+	print("Warning: failed to generate paragraph splits:", e)
 
 # Fit model and try to obtain per-document probabilities in a backward/forward-compatible way
 try:
@@ -199,29 +277,47 @@ print("Top 10 topic frequencies:\n", topic_freq.head(10))
 topic = model.get_topic(9)
 print("Topicwords:", topic)
 
-# visualize topics (fixed call)
-fig = model.visualize_topics(top_n_topics=20)
-###### fig = model.visualize_barchart()
-###### fig = model.visualize_heatmap()
+# visualize topics as small barcharts like the screenshot
+fig = model.visualize_barchart(top_n_topics=10, n_words=5)
 fig.show()
 
-def get_top_word_probs(model, topic_id, n=10, method="normalize"):
-	"""
-	Returns list of dicts: [{"word": str, "score": float, "prob": float}, ...]
-	method: "normalize" (score / sum(scores)) or "softmax"
-	"""
-	topic = model.get_topic(topic_id)
-	if not topic:
-		return []
-	words, scores = zip(*topic[:n])
-	scores = np.array(scores, dtype=float)
-	if method == "softmax":
-		exps = np.exp(scores - scores.max())
-		probs = exps / exps.sum()
-	else:  # normalize
-		s = scores.sum() if scores.sum() != 0 else 1.0
-		probs = scores / s
-	return [{"word": w, "score": float(s), "prob": float(p)} for w, s, p in zip(words, scores, probs)]
+def get_top_word_probs(model, topic_id, n=8, method="normalize"):  # Reduced n from 10 to 8
+    """
+    Improved topic word selection with better filtering
+    """
+    topic = model.get_topic(topic_id)
+    if not topic:
+        return []
+    
+    # Filter out less meaningful terms and duplicates
+    filtered = []
+    seen_lemmas = set()
+    
+    for word, score in topic:
+        word_lower = word.lower()
+        # Skip if in extended stopwords or already seen
+        if (word_lower not in EXTENDED_STOPWORDS and 
+            word_lower not in seen_lemmas and
+            len(word) > 2):
+            filtered.append((word, score))
+            seen_lemmas.add(word_lower)
+    
+    if not filtered:
+        return []
+    
+    # Take top n words
+    words, scores = zip(*filtered[:n])
+    scores = np.array(scores, dtype=float)
+    
+    # Normalize probabilities
+    if method == "softmax":
+        exps = np.exp(scores - scores.max())
+        probs = exps / exps.sum()
+    else:  # normalize
+        s = scores.sum() if scores.sum() != 0 else 1.0
+        probs = scores / s
+        
+    return [{"word": w, "score": float(s), "prob": float(p)} for w, s, p in zip(words, scores, probs)]
 
 def get_all_topics_top_word_probs(model, n=10, method="normalize", skip_negative=True):
 	"""
@@ -336,9 +432,8 @@ if 9 in topic_conf_stats:
 	print(f"Top docs for topic 9 (index, conf, snippet):")
 	for idx, conf, doc in top_docs:
 		print(idx, conf, doc[:200].replace("\n", " "))
-# --- end probability analysis ---------------------------------------------
 
-# helper: build full topic-probability matrix (n_docs x n_topics) and return topic order
+# build full topic-probability matrix (n_docs x n_topics) and return topic order
 def build_full_topic_matrix(assigned_topics, probs, model, skip_negative=True):
 	"""
 	Returns (full_matrix, topic_order)
