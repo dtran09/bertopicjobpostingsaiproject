@@ -132,35 +132,59 @@ except Exception:
 # sklearn stopwords for fallback tokenizer
 sklearn_stop = set(ENGLISH_STOP_WORDS)
 
-EXTENDED_STOPWORDS = set(ENGLISH_STOP_WORDS).union({
-	"date", "post", "title", "datum", "type", "time", "posted", "posting",
-	"apply", "job", "company", "include", "includes", "come", "work", "experience",
-	"required", "requirement", "requirements", "role", "position", "opportunity",
-	"skill", "skills", "ability", "new", "use", "using", "based", "within",
-	"environment", "level", "strong", "excellent", "good", "knowledge", "understanding"
-})
+# Add a small metadata blacklist and optionally dynamic column-based stopwords
+STATIC_META_STOPWORDS = {
+	"original", "requisition", "category", "reference", "req", "reqid", "posting",
+	"posted", "date", "salary_range", "salary", "pay", "base"
+}
+# include any obvious location/state noise you observed
+LOCATION_STOPWORDS = {
+	"texas", "california", "florida", "newyork", "new", "york", "usa", "u.s.", "us"
+}
+
+# Build dynamic stopwords from dataframe column names (lowercased)
+DYNAMIC_META_STOPWORDS = set()
+try:
+	DYNAMIC_META_STOPWORDS = {str(c).strip().lower() for c in df.columns if isinstance(c, (str,))}
+except Exception:
+	DYNAMIC_META_STOPWORDS = set()
+
+EXTENDED_STOPWORDS = set(ENGLISH_STOP_WORDS).union(
+	STATIC_META_STOPWORDS,
+	LOCATION_STOPWORDS,
+	DYNAMIC_META_STOPWORDS,
+	{
+		"date", "post", "title", "datum", "type", "time", "posted", "apply",
+		"job", "company", "include", "includes", "come", "work", "experience",
+		"required", "requirement", "requirements", "role", "position", "opportunity",
+		"skill", "skills", "ability", "new", "use", "using", "based", "within",
+		"environment", "level", "strong", "excellent", "good", "knowledge", "understanding"
+	}
+)
 
 def improved_tokenizer(text):
 	"""
-	More balanced tokenizer that keeps meaningful job-related terms.
+	Tokenizer that filters extended and metadata tokens.
 	Uses spaCy when available (lemmas + POS filtering), otherwise a regex fallback.
 	"""
 	if spacy_available and nlp is not None:
 		doc = nlp(text or "")
 		tokens = []
 		for token in doc:
-			if (token.is_alpha and
-				not token.is_stop and
-				token.lemma_.lower() not in EXTENDED_STOPWORDS and
-				len(token.lemma_) > 2):
-				# Include nouns, proper nouns, adjectives, and some verbs
-				if token.pos_ in {"NOUN", "PROPN", "ADJ", "VERB"}:
-					tokens.append(token.lemma_.lower())
+			lemma = token.lemma_.lower().strip()
+			# skip non-alpha, stopwords, numbers, very short lemmas, and metadata/location tokens
+			if (not token.is_alpha or token.is_stop
+				or lemma in EXTENDED_STOPWORDS or lemma in DYNAMIC_META_STOPWORDS
+				or len(lemma) <= 2 or token.pos_ == "NUM"):
+				continue
+			# include only useful POS categories
+			if token.pos_ in {"NOUN", "PROPN", "ADJ", "VERB"}:
+				tokens.append(lemma)
 		return tokens
 	else:
-		# Fallback tokenizer: words of length >=3 filtered by extended stopwords
+		# Fallback tokenizer: words of length >=3 filtered by extended stopwords and dynamic metadata
 		toks = re.findall(r"\b[a-zA-Z]{3,}\b", (text or "").lower())
-		return [t for t in toks if t not in EXTENDED_STOPWORDS]
+		return [t for t in toks if t not in EXTENDED_STOPWORDS and t not in DYNAMIC_META_STOPWORDS]
 
 # use CountVectorizer with the custom tokenizer to remove adjectives/pronouns and stopwords
 # note: token_pattern must be None when using a custom tokenizer
