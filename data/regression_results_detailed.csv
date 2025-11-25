@@ -1,0 +1,77 @@
+Feature,Description,Coefficient,Impact
+d3,range compensation annual offer,"88,591.90",Positive
+Sector_Telecommunications,Category: Sector (Value: Telecommunications),"87,589.38",Positive
+Type of ownership_Government,Category: Type of ownership (Value: Government),"72,325.02",Positive
+state_MN,Category: state (Value: MN),"63,958.27",Positive
+Type of ownership_Self-employed,Category: Type of ownership (Value: Self-employed),"54,731.68",Positive
+Type of ownership_Company - Private,Category: Type of ownership (Value: Company - Private),"34,919.30",Positive
+d2,health care patient clinical,"30,681.77",Positive
+Size_1000+ Employees,Category: Size (Value: 1000+ Employees),"26,675.19",Positive
+Type of ownership_Nonprofit Organization,Category: Type of ownership (Value: Nonprofit Organization),"22,579.91",Positive
+Rating,Numerical Feature: Rating,"21,345.28",Positive
+Type of ownership_Company - Public,Category: Type of ownership (Value: Company - Public),"21,201.32",Positive
+state_KY,Category: state (Value: KY),"19,877.60",Positive
+Sector_Restaurants & Food Service,Category: Sector (Value: Restaurants & Food Service),"19,843.41",Positive
+Size_Unknown,Category: Size (Value: Unknown),"17,675.61",Positive
+Sector_Transportation & Logistics,Category: Sector (Value: Transportation & Logistics),"15,914.05",Positive
+Size_200 to 1000 Employees,Category: Size (Value: 200 to 1000 Employees),"14,969.01",Positive
+Sector_Real Estate,Category: Sector (Value: Real Estate),"14,261.38",Positive
+Type of ownership_Hospital,Category: Type of ownership (Value: Hospital),"13,723.29",Positive
+state_CA,Category: state (Value: CA),"12,909.00",Positive
+Sector_Retail & Wholesale,Category: Sector (Value: Retail & Wholesale),"10,580.91",Positive
+state_WA,Category: state (Value: WA),"9,957.66",Positive
+d5,Topic 5 (Name Missing),"8,371.54",Positive
+Sector_Media & Communication,Category: Sector (Value: Media & Communication),"8,353.86",Positive
+state_NM,Category: state (Value: NM),"7,518.73",Positive
+Sector_Information Technology,Category: Sector (Value: Information Technology),"7,479.82",Positive
+Sector_Management & Consulting,Category: Sector (Value: Management & Consulting),"6,276.65",Positive
+Type of ownership_Private Practice / Firm,Category: Type of ownership (Value: Private Practice / Firm),"4,644.20",Positive
+Sector_Pharmaceutical & Biotechnology,Category: Sector (Value: Pharmaceutical & Biotechnology),675.66,Positive
+state_TN,Category: state (Value: TN),0,Positive
+state_NH,Category: state (Value: NH),0,Positive
+Sector_Legal,Category: Sector (Value: Legal),0,Negative
+Sector_Hotels & Travel Accommodation,Category: Sector (Value: Hotels & Travel Accommodation),-780.54,Negative
+Sector_Financial Services,Category: Sector (Value: Financial Services),"-1,334.94",Negative
+state_Remote,Category: state (Value: Remote),"-2,044.78",Negative
+state_NY,Category: state (Value: NY),"-4,277.20",Negative
+Sector_Insurance,Category: Sector (Value: Insurance),"-4,659.85",Negative
+Sector_Human Resources & Staffing,Category: Sector (Value: Human Resources & Staffing),"-6,828.71",Negative
+Sector_Manufacturing,Category: Sector (Value: Manufacturing),"-8,362.44",Negative
+state_GA,Category: state (Value: GA),"-13,930.75",Negative
+state_VA,Category: state (Value: VA),"-15,479.73",Negative
+state_Missing,Category: state (Value: Missing),"-15,694.19",Negative
+Type of ownership_Contract,Category: Type of ownership (Value: Contract),"-15,695.25",Negative
+"Sector_Energy, Mining & Utilities","Category: Sector (Value: Energy, Mining & Utilities)","-16,586.25",Negative
+"Sector_Construction, Repair & Maintenance Services","Category: Sector (Value: Construction, Repair & Maintenance Services)","-17,114.35",Negative
+Sector_Healthcare,Category: Sector (Value: Healthcare),"-18,171.52",Negative
+Sector_Missing,Category: Sector (Value: Missing),"-18,752.14",Negative
+state_CT,Category: state (Value: CT),"-18,919.15",Negative
+d4,regular career professional employment career status employment regular,"-19,631.95",Negative
+d1,build help future community,"-20,203.36",Negative
+state_MD,Category: state (Value: MD),"-21,557.58",Negative
+state_NJ,Category: state (Value: NJ),"-21,819.53",Negative
+Type of ownership_Subsidiary or Business Segment,Category: Type of ownership (Value: Subsidiary or Business Segment),"-21,937.46",Negative
+state_MA,Category: state (Value: MA),"-22,523.37",Negative
+state_MI,Category: state (Value: MI),"-25,893.19",Negative
+state_UT,Category: state (Value: UT),"-27,188.41",Negative
+Sector_Nonprofit & NGO,Category: Sector (Value: Nonprofit & NGO),"-27,259.74",Negative
+state_LA,Category: state (Value: LA),"-27,663.75",Negative
+state_ND,Category: state (Value: ND),"-27,973.78",Negative
+state_CO,Category: state (Value: CO),"-28,126.74",Negative
+Sector_Education,Category: Sector (Value: Education),"-28,355.54",Negative
+state_FL,Category: state (Value: FL),"-30,793.79",Negative
+state_IL,Category: state (Value: IL),"-31,008.22",Negative
+state_NC,Category: state (Value: NC),"-31,165.02",Negative
+state_WI,Category: state (Value: WI),"-32,145.11",Negative
+state_IN,Category: state (Value: IN),"-32,594.34",Negative
+Sector_Personal Consumer Services,Category: Sector (Value: Personal Consumer Services),"-34,104.93",Negative
+state_DE,Category: state (Value: DE),"-36,990.83",Negative
+state_TX,Category: state (Value: TX),"-40,897.65",Negative
+state_MO,Category: state (Value: MO),"-41,010.52",Negative
+state_DC,Category: state (Value: DC),"-44,865.91",Negative
+state_OH,Category: state (Value: OH),"-48,537.63",Negative
+d0,model analysis machine learning,"-51,982.87",Negative
+Sector_Government & Public Administration,Category: Sector (Value: Government & Public Administration),"-55,664.49",Negative
+state_PA,Category: state (Value: PA),"-58,529.37",Negative
+state_AZ,Category: state (Value: AZ),"-66,124.14",Negative
+state_MS,Category: state (Value: MS),"-85,883.77",Negative
