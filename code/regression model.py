@@ -4,6 +4,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 import os
+import statsmodels.api as sm
+from scipy import stats
 
 # --- File Paths (Ensure these match your environment) ---
 OUTPUT_BASE = r"c:\Users\trand27\Python Projects\Bertopic Test"
@@ -118,6 +120,18 @@ def run_regression():
     X_train, X_test, Y_train, Y_test = train_test_split(
         X, Y, test_size=0.2, random_state=42
     )
+
+    X_train = X_train.astype(float)
+    X_test = X_test.astype(float)
+    
+    # Add a constant column for OLS (intercept term)
+    X_train_const = sm.add_constant(X_train)
+
+    # Fit OLS model
+    ols_model = sm.OLS(Y_train, X_train_const).fit()
+
+    print("\n--- OLS Statistical Summary (includes p-values) ---")
+    print(ols_model.summary())
 
     # 4. Train Model
     model = LinearRegression()
