@@ -133,6 +133,26 @@ def run_regression():
     print("\n--- OLS Statistical Summary (includes p-values) ---")
     print(ols_model.summary())
 
+    # === Extract OLS Coefficients & P-values ===
+    ols_params = ols_model.params       # coefficients (including constant)
+    ols_pvalues = ols_model.pvalues     # p-values (same index)
+
+    # Convert to a dataframe for clarity
+    ols_results_df = pd.DataFrame({
+    "Feature": ols_params.index,
+    "OLS_Coefficient": ols_params.values,
+    "p_value": ols_pvalues.values
+    })
+
+    # Display the OLS coefficient table
+    print("\n--- OLS Coefficients and P-values ---")
+    print(ols_results_df.to_string(index=False))
+
+    # Save to CSV
+    ols_coef_path = os.path.join(OUTPUT_BASE, "ols_coefficients_and_pvalues.csv")
+    ols_results_df.to_csv(ols_coef_path, index=False)
+    print(f"\nSaved OLS coefficients + p-values to: {ols_coef_path}")
+
     # 4. Train Model
     model = LinearRegression()
     model.fit(X_train, Y_train)
