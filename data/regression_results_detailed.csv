@@ -27,9 +27,9 @@ Sector_Information Technology,Category: Sector (Value: Information Technology),"
 Sector_Management & Consulting,Category: Sector (Value: Management & Consulting),"6,276.65",Positive
 Type of ownership_Private Practice / Firm,Category: Type of ownership (Value: Private Practice / Firm),"4,644.20",Positive
 Sector_Pharmaceutical & Biotechnology,Category: Sector (Value: Pharmaceutical & Biotechnology),675.66,Positive
-state_TN,Category: state (Value: TN),0,Positive
-state_NH,Category: state (Value: NH),0,Positive
-Sector_Legal,Category: Sector (Value: Legal),0,Negative
+state_TN,Category: state (Value: TN),0.00,Positive
+state_NH,Category: state (Value: NH),0.00,Positive
+Sector_Legal,Category: Sector (Value: Legal),-0.00,Negative
 Sector_Hotels & Travel Accommodation,Category: Sector (Value: Hotels & Travel Accommodation),-780.54,Negative
 Sector_Financial Services,Category: Sector (Value: Financial Services),"-1,334.94",Negative
 state_Remote,Category: state (Value: Remote),"-2,044.78",Negative
